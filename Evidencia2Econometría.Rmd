@@ -1,0 +1,495 @@
+---
+title: "Evidencia2Econometría"
+author: "Gabriela Cantú"
+date: '2022-09-08'
+output: html_document
+---
+
+```{r}
+rm(list=ls())
+```
+
+```{r}
+library(tsdl)
+library(TTR) 
+library(forecast) 
+library(dplyr)
+library(readxl)
+library(urca)
+library(tseries)
+library(astsa)
+library(tidyverse)
+library(lubridate)
+library(foreign)
+library(car)
+library(timsac)
+library(vars)
+library(lmtest)
+library(mFilter)
+library(dynlm)
+library(nlme)
+library(quantmod)
+library(xts)
+```
+
+Se estará trabajando con 3 variables. La primera variable será la variable principal de estudio y hace referencia al crédito total a hogares y a instituciones  sin fines de lucro que sirven a hogares, no ajustado a México. La segunda variable incluida, que se busca que funcione como la variable exógena, es gasto final de consumo privado en México. Por último, se utilizará la variable de índice de precios al consumidor en caso de que la variable anteriormente mencionada no tenga alguna relación de causalidad con la variable de estudio. Los datos de estas variables se encuentran en trimestres, desde el último trimestre de 1994 hasta el último trimestre del 2021. 
+```{r}
+datos <- read_excel(file.choose()) #var. xls
+head(datos) 
+```
+Antes que nada se convirtió la variable de estudio en una serie de tiempo, indicando desde que año empieza y la frecuencia en la que se encuentra. Como se puede observar, la serie de tiempo aún no es estacionaria. 
+```{r}
+cr.ts <- ts(datos[, 1], start = c(1994,4), frequency = 4)
+cr.ts
+plot(cr.ts)
+```
+
+Se repite el mismo procedimiento para la variable de gasto final de consumo privado y también se puede observar que no es estacionaria. Asimismo, se puede observar que hay un movimiento más irregular que en la serie de tiempo anterior en el 2020. 
+```{r}
+pr.ts <- ts(datos[, 2], start = c(1994,4), frequency = 4)
+pr.ts
+plot(pr.ts)
+```
+
+Se utilizó el método de suavizamiento de medias móviles simples para poder observar de mejor manera la serie de tiempo, intentando disminuir las irregularidades para poder visualizar elementos de la serie de tiempo. En el caso del crédito se puede observar de mejor manera el componente de tendencia. 
+```{r}
+plot(cr.ts)
+lines(SMA(cr.ts,n=2),col="red")
+lines(SMA(cr.ts,n=4),col="yellow")
+lines(SMA(cr.ts,n=8),col="blue")
+plot(SMA(cr.ts,n=8),col="blue")
+```
+
+Se aplica el mismo método para la serie de tiempo de gasto final de consumo privado y también se puede observar que el componente irregular disminuye y nos permite ver la tendencia de la variable de mejor manera. 
+```{r}
+plot(pr.ts)
+lines(SMA(pr.ts,n=2),col="red")
+lines(SMA(pr.ts,n=2),col="yellow")
+lines(SMA(pr.ts,n=8),col="blue")
+plot(SMA(pr.ts,n=8),col="blue")
+```
+
+A través de esta función se puede observar que la serie de tiempo cuenta con 3 componentes, tendencia, estacionalidad e irregularidad. Es importante notar que la escala del componente estacional es mucho menor a la de los otros componentes. de igual manera, la irregularidad no es muy alta. De cualquier manera, se puede observar que la tendencia es constante y alta en comparación con los otros componentes.
+```{r}
+desccr.ts <- decompose(cr.ts)
+plot(desccr.ts)
+```
+
+En esta serie de tiempo también se pueden observar los diferentes componentes. Se puede observar que la irregularidad del año 2020 es bastante alta ya que incluso hace que la escala se extienda. También se puede observar que tiene estacionalidad y el componente de tendencia. 
+```{r}
+descpr.ts <- decompose(pr.ts)
+plot(descpr.ts)
+```
+
+Se exploraron los diferentes elementos de la serie más de cerca para entender un poco más acerca del comportamiento. Al igual que se dijo anteriormente, el componente de tendencia predomina de gran manera en esta serie de tiempo. 
+```{r}
+desccr.ts$seasonal
+plot(desccr.ts$seasonal)
+desccr.ts$trend
+plot(desccr.ts$trend)
+desccr.ts$random
+plot(desccr.ts$random)
+```
+
+Se hace un ajuste para observar lo que pasaría si se elimina el componente estacional y después si se elimina el componente aleatorio. Se puede observar el componente de tendencia de mejor manera en este caso. 
+```{r}
+ajuscr.ts <- cr.ts - desccr.ts$seasonal
+plot(ajuscr.ts)
+ajuscr2.ts <- cr.ts - desccr.ts$seasonal-desccr.ts$random
+plot(ajuscr2.ts)
+```
+
+Al igual que en la serie de tiempo anterior, se explora más a detalle al observar los diferentes componentes por separado. Se puede observar que la escala estacional es más alta en esta serie de tiempo.
+```{r}
+descpr.ts$seasonal
+plot(descpr.ts$seasonal)
+descpr.ts$trend
+plot(descpr.ts$trend)
+descpr.ts$random
+plot(descpr.ts$random)
+```
+
+De la misma manera, se elimina el componente estacional y después el irregular para observar de mejor manera el componente de tendencia. Esto permite que concluyamos que el gasto final de consumo privado va creciendo a lo largo del tiempo. 
+```{r}
+ajuspr.ts <- pr.ts - descpr.ts$seasonal
+plot(ajuspr.ts)
+ajuspr2.ts <- pr.ts - descpr.ts$seasonal-descpr.ts$random
+plot(ajuspr2.ts)
+```
+
+Se hizo la prueba de Dickey Fuller para poder observar si las series de tiempo son estacionarias, esto significa que tengan media constante, varianza constante y autocovarianza constante. Debido a que el valor de p es mayor a 0.05 no serían consideradas estacionarias. 
+```{r}
+adf.test(cr.ts,alternative="stationary")
+adf.test(pr.ts,alternative="stationary")
+```
+Debido a que en ambas series de tiempo la varianza cambia con el tiempo se estabilizan utilizando el método logarítmico, donde el logaritmo se aplica a los valores de la serie. Al graficar las series de tiempo se puede observar que aún no son estacionarias, por lo que se tiene que aplicar diferenciación.
+```{r}
+crlog.ts=log(cr.ts)
+plot(crlog.ts, main="Total Credit to Households and non-profit Institutions Serving Households con logaritmo")
+prlog.ts=log(pr.ts)
+plot(prlog.ts, main="Private Final Consumption Expenditure con logaritmo")
+```
+
+Se utiliza la función de ndiffs para saber el número de diferenciaciones que se deben hacer a cada serie para que sea estacionaria. 
+```{r}
+ndiffs(crlog.ts)
+ndiffs(prlog.ts)
+```
+En ambas series se necesita de 2 diferenciadores por lo que se aplican y se grafican. Asimismo, se vuelve a hacer la prueba de Dickey Fuller y tanto en la prueba como visualmente se puede observar que ambas series de tiempo ya son estacionarias. 
+```{r}
+crdif.ts=diff(crlog.ts, differences=2)
+plot(crdif.ts)
+adf.test(crdif.ts,alternative="stationary")
+```
+
+```{r}
+prdif.ts=diff(prlog.ts, differences=2)
+plot(prdif.ts)
+adf.test(prdif.ts,alternative="stationary")
+```
+
+Se obtienen los correlogramas para poder encontrar un posible modelo de ARIMA. Debido a los rezagos que cada correlograma arroja se puede obtener un modelo de ARIMA(3,0,0). Sin embargo, si se desea trabajar con la serie de tiempo logarítmica se debe de hacer un modelo (3,2,0), indicando que se utilizaron 2 diferenciadores para que la serie de tiempo fuera estacionaria. 
+```{r}
+acf(crdif.ts, lag.max=20)
+acf(crdif.ts, lag.max=20, plot=F)
+```
+
+```{r}
+pacf(crdif.ts, lag.max=20)
+pacf(crdif.ts, lag.max=20, plot=F)
+```
+
+Se aplica la prueba de Ljung-Box para saber si existe ruido blanco. Debido a que el valor de p es mayor a 0.05 se puede decir que sí hay ruido blanco y que podría ser un buen modelo ya que los datos se distribuyen de manera independiente y no hay correlaciones. 
+```{r}
+#ARIMA A MANO
+#Valor de p mayor a 0.05, hay ruido blanco, podría ser buen modelo
+modelo=arima(crlog.ts, order=c(3,2,0))
+modelo
+tsdiag(modelo)
+Box.test(residuals(modelo), type= "Ljung-Box")
+error=residuals(modelo)
+plot(error)
+```
+
+Posteriormente, se obtuvo el modelo ARIMA a través de la función auto.arima que evalúa diferentes modelos y selecciona el mejor. Se indica que la serie de tiempo es estacionaria ya que es con la que se esta trabajando en este pedazo de código. Asimismo, se indica que no es estacional ya que en este caso se está buscando un ARIMA y no un SARIMA. De igual manera, se grafican pronósticos para 5 años. 
+```{r}
+#ARIMA
+#estacionaria
+acr1 <- auto.arima(crdif.ts,stationary=T,seasonal=F,stepwise=T) #ARIMA seleccionado
+summary(acr1)
+plot(forecast(acr1,h=20))#MEJOR OPCION
+```
+
+Al igual que en el código anterior, se utiliza la función de auto.arima. Sin embargo, en este caso se utiliza una serie no estacionaria, lo cual se indica a la función para que sea tomado en cuenta durante la construcción del modelo. De la misma manera, se hace un pronóstico de los siguientes 5 años. 
+```{r}
+#no estacionaria
+acr1.1 <- auto.arima(cr.ts,stationary=F,seasonal=F,stepwise=T)
+summary(acr1.1)
+plot(forecast(acr1.1,h=20))
+```
+
+Se selecciona el primer modelo, ARIMA(0,0,1), para trabajar ya que los valores de BIC, AIC, y sigma al cuadrado son menores al otro modelo. Se lleva a cabo la prueba de Ljung Box y también se encuentra un valor de p mayor a 0.05, lo que nos indica que los residuales son independientes, por lo que se está trabajando con un buen modelo. 
+```{r}
+tsdiag(acr1)
+Box.test(residuals(acr1), type= "Ljung-Box")
+error1=residuals(acr1)
+plot(error1)
+```
+
+Se busca hacer pronósticos al dividir los datos en entrenamiento y prueba. Se selecciona el 80% de los datos para utilizarlos en entrenamiento y el 20% para la prueba. En este caso se trabaja con la serie diferenciada y por ende, con el modelo ARIMA(0,0,1). Es importante mencionar que si se desea trabajar con este modelo sería necesario utilizar la serie ya diferenciada. De lo contrario, se debería especificar un nuevo modelo. Se puede observar que el sigma al cuadrado es bajo por lo que podría ser un buen modelo. De cualquier manera, al graficarlo no parece ser muy atinado y sería necesario analizar los intervalos. Al observar los intervalos se puede observar que son más atinados que el punto exacto de pronóstico, entonces podría ser un buen modelo si se toman en cuenta los intervalos. 
+```{r}
+train1 <- window(crdif.ts, start = c(1994,4), end = c(2015,4))
+test1 <- window(crdif.ts, start = c(2016,1))
+arima1 <- arima(train1, order=c(0,0,1))
+summary(arima1)
+resultado1 <- forecast(arima1, h = 4*6) #h número de parámetros que queremos
+plot(resultado1[[4]], col = "red", lwd = 2, main = "Predicción vs real")
+lines(test1, col = "blue", lwd = 2, lty = 2)
+```
+
+```{r}
+auto.arima(cr.ts)
+auto.arima(crdif.ts)
+```
+
+
+Asimismo, se pronostica utilizando la serie de tiempo original. Se indica el modelo que se encontró a través de la función auto.arima. En este caso se puede observar que el RMSE es más alto que en el modelo anterior y que el sigma al cuadrado es más alto. De cualquier manera, en otras medidas de comparación como el error medio de porcentaje absoluto, el modelo ARIMA(4,2,1) tiene un mejor desempeño. Asimismo, es importante tomar en cuenta que el sigma al cuadrado no sería una medida válida de comparación ya que ambos modelos están en diferentes escalas de valores. 
+```{r}
+train11 <- window(cr.ts, start = c(1994,4), end = c(2015,4))
+test11 <- window(cr.ts, start = c(2016,1))
+arima11 <- arima(train11, order=c(4,2,1))
+summary(arima11)
+resultado1 <- forecast(arima11, h = 4*6) #h número de parámetros que queremos (3 años)
+plot(resultado1[[4]], col = "red", lwd = 2, main = "Predicción vs real")
+lines(test11, col = "blue", lwd = 2, lty = 2)
+```
+
+Se observan tanto los valores del pronóstico como la gráfica del pronóstico. Se puede observar de manera más realística en la serie de tiempo no diferenciada ya que se observa el comportamiento de manera más normal, tomando en cuenta el componente de tendencia. 
+```{r}
+pronostico1 <- forecast::forecast(acr1, h=12)
+pronostico1
+plot(pronostico1)
+pronostico11 <- forecast::forecast(acr1.1, h=12)
+pronostico11
+plot(pronostico11)
+```
+
+De igual manera, se lleva a cabo el modelo SARIMA. Antes que nada, se lleva a cabo en la serie de tiempo original, indicando que la serie no es estacionaria y se hace un pronóstico. Se puede observar un sigma al cuadrado relativamente alto considerando los valores de la serie de tiempo. En cuanto a los otros métodos de evaluación, se compararán con los siguientes modelos más adelante. 
+```{r}
+acr2 <- auto.arima(cr.ts,stationary=F,seasonal=T,stepwise=T)
+summary(acr2)
+plot(forecast(acr2,h=20))
+```
+
+En este caso se utiliza la función auto.arima con la serie diferenciada, indicando que ya es estacionaria y que tiene estacionalidad, para poder tener el parámetro estacional dentro del modelo. 
+```{r}
+acr2.1 <- auto.arima(crdif.ts,stationary=T,seasonal=T,stepwise=T)
+summary(acr2.1)
+plot(forecast(acr2.1,h=20))
+```
+
+Se utiliza la función de auto.arima indicando trace como verdadero para poder observar las diferentes posibilidades de modelos y los resultados que tuvo cada uno. En este caso se encuentra que ARIMA(3,2,0)(0,0,1)[4] es el mejor modelo
+```{r}
+auto.arima(cr.ts, trace=T)
+```
+
+Se aplica el método anterior en la serie diferenciada y se obtiene otro modelo. Ambos modelos son buenos, el que utiliza la serie diferenciada tiene mejor desempeño en ciertos métodos de evaluación y el que no la utiliza en otros. De cualquier manera, tomando en cuenta el BIC y AIC (Sigma cuadrado no porque las series no están en la misma escala), se selecciona como mejor modelo el ARIMA(0,0,1)(1,0,1)[4]
+```{r}
+auto.arima(crdif.ts, trace=T)
+```
+
+Ambos modelos tienen un valor de p mayor a 0.05 lo que indica que los residuales son independientes, por lo que se está trabajando con buenos modelos ya que tienen ruido blanco. 
+```{r}
+tsdiag(acr2)
+Box.test(residuals(acr2), type= "Ljung-Box")
+error2=residuals(acr2)
+plot(error2)
+```
+
+```{r}
+tsdiag(acr2.1)
+Box.test(residuals(acr2.1), type= "Ljung-Box")
+error22=residuals(acr2.1)
+plot(error22)
+```
+
+En este caso se arrojan diferentes modelos de SARIMA debido a que se está trabajando con una selección específica de datos para entrenar y probar el modelo. Utilizando la regla de 80% para entrnamiento y 20% para prueba se obtiene el SARIMA de la siguiente manera: ARIMA(0,2,1)(0,0,1)[4]. De cualquier manera, a través de estos pronósticcos se puede observar que son más precisos. Esto nos lleva a pensar que agregar el parámetro estacional al modelo nos lleva a tener pronósticos más precisos. 
+```{r}
+train2 <- window(cr.ts, start = c(1994,4), end = c(2015,4))
+test2 <- window(cr.ts, start = c(2016,1))
+sarima2 <- auto.arima(train2,stationary=F,seasonal=T,stepwise=T)
+summary(sarima2)
+resultado2 <- forecast(sarima2, h = 4*6) 
+plot(resultado2[[4]], col = "red", lwd = 2, main = "Predicción vs real")
+lines(test2, col = "blue", lwd = 2, lty = 2)
+```
+
+Al utilizar la serie con diferenciación se obtiene el mismo modelo que utilizando la serie de tiempo completa. Se puede observar que los pronósticos son bastante buenos. La variación más grande se puede observar alrededor del 2019 y 2020. Años que tuvieron bastante incertidumbre relacionada con la pandemia de COVID-19. A pesar de lo anteriormente mencionado, se observa un buen ajuste y se podría decir que es un buen modelo para pronosticar. 
+```{r}
+train22 <- window(crdif.ts, start = c(1994,4), end = c(2015,4))
+test22 <- window(crdif.ts, start = c(2016,1))
+sarima22 <- auto.arima(train22,stationary=T,seasonal=T,stepwise=T)
+summary(sarima22)
+resultado22 <- forecast(sarima22, h = 4*6) 
+plot(resultado22[[4]], col = "red", lwd = 2, main = "Predicción vs real")
+lines(test22, col = "blue", lwd = 2, lty = 2)
+```
+
+Se llevaron a cabo pronósticos con el modelo anteriormente descrito para 3 años, utilizando toda la serie de tiempo ys e puede observar mas o menos el mismo comportamiento que al aplicar el modelo en datos de entrenamiento y prueba. 
+```{r}
+pronostico2 <- forecast::forecast(acr2.1, h=12)
+pronostico2
+plot(pronostico2)
+```
+
+Ahora se busca encontrar la variable exógena ideal para hacer los modelos de ARIMAX y VAR. Se intenta lograr con la primera variable, gasto final de consumo privado en México. 
+```{r}
+#Causalidad de variables
+ts.plot(crdif.ts,prdif.ts,col=c("blue","red"))
+```
+
+A pesar de cambiar el número de lags, no se encontró ninguna relación de causalidad (por lo menos hasta el lag número 12), por lo que es necesario utilizar otra variable. 
+```{r}
+#Si p>0.05, acepto hipotesis nula
+#las hipótesis son:
+# H0: El consumo privado no causa (según la prueba de Granger) el crédito
+# H1: El consumo privado causa el el crédito
+grangertest(crdif.ts~prdif.ts, order=12)
+
+#Si p>0.05, acepto hipotesis nula
+#las hipótesis son:
+# H0: El crédito no causa (según la prueba de Granger) el consumo privado
+# H1: El crédito causa el el consumo privado
+grangertest(prdif.ts~crdif.ts, order=1)
+```
+
+Se utiliza la variable de índice de precios del consumidor para hacerla estacionaria y poder buscar si podría funcionar como la variable exógena. Afortunadamente, también se diferencía 2 veces entonces sería la misma cantidad de veces que para la variable de crédito. Visualmente y a través de la prueba de Dickey Fuller se puede concluir que la serie de tiempo es estacionaria. 
+```{r}
+#Como ninguna sirve utilizamos otra variable
+cp.ts <- ts(datos[, 3], start = c(1994,4), frequency = 4)
+cp.ts
+plot(cp.ts)
+cplog.ts=log(cp.ts)
+ndiffs(cplog.ts)
+cpdif.ts=diff(cplog.ts, differences=2)
+plot(cpdif.ts)
+adf.test(cpdif.ts,alternative="stationary")
+```
+
+Carga de librerías faltantes
+```{r}
+library(car)
+library(timsac)
+library(vars)
+library(lmtest)
+library(mFilter)
+library(dynlm)
+library(nlme)
+library(quantmod)
+library(xts)
+```
+
+Se llevan a cabo las hipótesis para buscar causalidad. Se encuentra que el índice de precios del consumidor causa el crédito total a hogares y a instituciones  sin fines de lucro que sirven a hogares en el orden 5. 
+```{r}
+#Si p>0.05, acepto hipotesis nula
+#El índice de precios del consumidor no causa (según la prueba de Gragner) el crédito total a hogares y a instituciones  sin fines de lucro que sirven a hogares
+#El índice de precios del consumidor causa el crédito total a hogares y a instituciones  sin fines de lucro que sirven a hogares.
+grangertest(crdif.ts~cpdif.ts, order=5)
+```
+
+Se utilizará crédito para hacer referencia a crédito total a hogares y a instituciones  sin fines de lucro que sirven a hogares. Asimismo se encuentra que el crédito causa el índice de precios del consumidor en orden 4. 
+```{r}
+#El crédito no causa (según la prueba de Gragner) el índice de precios del consumidor
+#El crédito causa (según la prueba de Gragner) el índice de precios del consumidor
+grangertest(cpdif.ts~crdif.ts, order=4)
+```
+
+Por la naturaleza del caso se tomará en cuenta el hecho de que el índice de precios del consumidor causa el crédito ya que el crédito es la variable de estudio. Al comprobar que por lo menos a través de la prueba de Gragner, el índice de precios del consumidor causa el crédito, se utilizará como variable exógena. Por ende, se llevará a cabo un modelo ARIMAX con la serie diferenciada y la variable exógena diferenciada. A través de esto se obtiene un SARIMAX(2,0,1)(1,0,1)[4], con la variable exógena anteriormente descrita. 
+```{r}
+modelo3 <- auto.arima(crdif.ts, stationary=T, stepwise=F,xreg=cpdif.ts)#Índice de precios es la exógena
+summary(modelo3)
+```
+Asimismo, se llevó a cabo un modelo ARIMAX en la que ninguna de las variables tiene estacionariedad. En ambos modelos la variable exógena es el índice de precios de consumidor. Con este procedimiento se obtiene un ARIMAX(1,2,3) con la variable exógena mencionada. 
+```{r}
+modelo3.1 <- auto.arima(cr.ts, stationary=F, stepwise=F,xreg=cp.ts)#Índice de precios es la exógena
+summary(modelo3.1)
+```
+
+Se lleva a cabo el modelo a través de un set de entrenamiento y prueba y se encuentra un SARIMAX(0,2,3)(0,0,1)[4]. De cualquier manera, se pueden observar muy buenos resultados al comparar los pronósticos con los valores reales. Entonces, el índice de precios de consumidor podría ser de ayuda para hablar del crédito en México 
+```{r}
+train3 <- window(cr.ts, start = c(1994,4), end = c(2015,4))
+test3 <- window(cr.ts, start = c(2016,1))
+trainexo <- window(cp.ts, start = c(1994,4), end = c(2015,4))
+testexo <- window(cp.ts, start = c(2016,1))
+arima3 <- auto.arima(train3, stationary=F, stepwise=F, xreg=trainexo)
+summary(arima3)
+resultado3 <- forecast(arima3, h = 4*6, xreg=testexo) 
+resultado3
+plot(resultado3[[4]], col = "red", lwd = 2, main = "Predicción vs real")
+lines(test3, col = "blue", lwd = 2, lty = 2)
+```
+
+De igual manera se obtuvo el pronóstico de la serie diferenciada y se obtuvo un ARIMA(0,0,1). A pesar de que los pronósticos parecen estar mejor ajustados en el SARIMAX, se puede decir que este modelo es mejor debido a los métodos de evaluación de AIC y BIC. A pesar de que en este modelo se puede observar un tipo de comportamiento similar, las predicciones se ven más alejadas de los resultados. De cualquier manera, esto puede ser una limitación visual, por lo que es mejor tomar en cuenta los métodos de evaluación. 
+```{r}
+train4 <- window(crdif.ts, start = c(1994,4), end = c(2015,4))
+test4 <- window(crdif.ts, start = c(2016,1))
+trainexo4 <- window(cpdif.ts, start = c(1994,4), end = c(2015,4))
+testexo4 <- window(cpdif.ts, start = c(2016,1))
+arima4 <- auto.arima(train4, stationary=T, stepwise=F, xreg=trainexo4)
+summary(arima4)
+resultado4 <- forecast(arima4, h = 4*6, xreg=testexo4) 
+resultado4
+plot(resultado4[[4]], col = "red", lwd = 2, main = "Predicción vs real")
+lines(test4, col = "blue", lwd = 2, lty = 2)
+```
+
+Al igual que en los modelos anteriores se llevan a cabo pronósticos para ver el comportamiento del crédito en México en los próximos 3 años. 
+```{r}
+pronostico3 <- forecast::forecast(modelo3, h=12, xreg=cpdif.ts)
+pronostico3
+plot(pronostico3)
+pronostico3.1 <- forecast::forecast(modelo3.1, h=12, xreg=cp.ts)
+pronostico3.1
+plot(pronostico3.1)
+```
+
+Se continúa con el modelo de Vector Autorregresivo utilizando la misma variable exógena que en el ARIMAX, el índice de precios del consumidor. Debido a que se busca explorar la causalidad de la variable exógena en el crédito en México se unen los datos con el crédito en la primera columna. 
+```{r}
+#VAR, continuación
+vardata <- cbind(crdif.ts,cpdif.ts)
+```
+
+Se encuentra a través de la selección que un autorregresivo de valor 4 es la mejor opción, por lo que se indica en nuestro modelo de VAR. 
+```{r}
+VARselect(vardata) 
+cvar <- VAR(vardata,p=4) #EN BASE A LOS RESULTADOS DE VARSELECT
+cvar
+```
+
+
+
+Con el el Vector Autoregresivo podemos observar que todos los números de las raíces son menores a 1, por lo que estamos cumpliendo con la estabilidad y que es el número correcto de rezagos. Asimismo, se puede observar una R cuadrada ajustada de 0.3, lo cual no es muy alto, incluso considerando modelos lineales hechos anteriormente. En realidad se puede observar que es aún mejor estimar el índice de precios de consumidor utilizando el crédito que al revés ya que su R cuadrada ajustada es más alta. Asimismo se puede observar que ambos son reducidos ya que no se encuentran las variables endógenas como tal en el modelo, solamente endógenas con rezagos. 
+```{r}
+summary(cvar)
+quartz()
+plot(cvar)
+```
+
+Para evaluar el modelo se utilizan diferentes pruebas. En este caso, se rechaza la hipótesis nula debido a que el valor de p es menor a 0.05. Por ende, esto indica que los residuales están correlacionados. 
+```{r}
+#H0: Los residuales no están correlacionados.
+#H1: Los residuales están correlacionados.
+serial.test(cvar,lags.pt = 4, type="PT.asymptotic")
+```
+
+En la siguiente pruba se rechaza la hipótesis nula en la prueba de JB, por ende, los residuales no son normales. La prueba de Jarque-Bera es una prueba de bondad de ajuste. Por ende se podría decir que los residuales no tienen asimetría y curtosis y por ende no tienen distribución normal (“Prueba de Normalidad de Jarque-Bera (JB),” 2022). 
+```{r}
+#H0: los residuales son normales
+#H1: los residuales no son normales 
+#homocedasticidad de los residuales (igualdad de varianzas)
+normality.test(cvar)
+```
+
+Esta función es para el test de Engle Gragner, una prueba de cointegración. Construye los residuales en forma de regresión estática. La hipótesis nula es que no existe cointegración. Debido a que el valor de p es menor a 0.05, no se rechaza la hipótesis nula (Engle Gragner Test, 2020). 
+```{r}
+arch.test(cvar, lags.multi=4)
+```
+
+En VAR, se mide la de respuesta de la variable dependiente ante los cambios en la variable exógena, este sería el tipo de pronóstico para los Vectores Autorregresivos
+```{r}
+proncvar <- irf(cvar, response="crdif.ts", n.ahead=8, boot=T)
+proncvar
+```
+
+En este caso se puede observar el impacto de los diferentes impulsos en la respuesta y el patrón que esto sigue. Se podría decir que sí existe una relación relevante entre la variable exógena seleccionada, el índice de precios al consumidor. 
+```{r}
+quartz()
+plot(proncvar)
+```
+
+```{r}
+fevd(cvar,n.ahead=50)$crdif.ts
+fevd(cvar,n.ahead=50)$cpdif.ts
+```
+
+Por último, se puede observar que en el pronóstico sucede el mismo efecto al que sucedió en modelos anteriores. Los intervalos llegan a tener mejores resultados o más precisos que el punto de pronóstico. Cabe recalcar que estos pronósticos se están llevando a cabo tomando en cuenta la serie de tiempo con diferenciación. 
+```{r}
+pronostico4 <- forecast::forecast(cvar, h=12)
+pronostico4
+plot(pronostico4)
+```
+
+```{r}
+apronosticos <- forecast(Acr1, h = 3) 
+escenario_optimista <- pronosticos$upper
+escenario_real <- pronosticos$mean
+escenario_pesimista <- pronosticos$lower
+
+resultados <- data.frame(Optimista = escenario_optimista,
+                         Real = escenario_real,
+                         Pesimista = escenario_pesimista)
+
+print(resultados)
+
+```
+
